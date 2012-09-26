@@ -46,7 +46,7 @@ public class HydraClient {
 	private String mHost = null;
 	private int mPort;
 	private String mPassphrase = null;
-	private static final String Sresult = "";
+	private static final String Sresult = "result";
 	private static final String Salias = "alias";
 	private static final String Stype = "type";
 	private static final String Shost = "host";
@@ -135,7 +135,7 @@ public class HydraClient {
 							if (value.equals("\"\""))
 								values.add("");
 							else
-								values.add(column);
+								values.add(value);
 							System.out.println("value:");
 							value = user_input.nextLine();
 						}
@@ -465,6 +465,7 @@ public class HydraClient {
 		if (response == null)
 			throw new IOException("no response read");
 		JSONObject jsonResponse = (JSONObject) mJSONParser.parse(response);
+		System.out.println("response: " + response);
 		setCredentials(jsonResponse);
 		if (!jsonResponse.containsKey(Sresult))
 			throw new IOException("no result");
