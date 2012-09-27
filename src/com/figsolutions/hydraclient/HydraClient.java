@@ -70,6 +70,7 @@ public class HydraClient {
 	}
 
 	// this can be run as a command line client
+	@SuppressWarnings("unchecked")
 	public static void main(String[] args) {
 		Scanner user_input = new Scanner(System.in);
 		String host = null;
@@ -87,14 +88,14 @@ public class HydraClient {
 		host = user_input.nextLine();
 		if ((host == null) || (host.length() == 0))
 			return;
-		System.out.println("Port, or null to exit:");
+		System.out.print("Port, or null to exit:");
 		String portStr = user_input.nextLine();
 		if ((portStr == null) || (portStr.length() == 0))
 			return;
 		port = Integer.parseInt(portStr);
-		System.out.println("Passphrase:");
+		System.out.print("Passphrase:");
 		passphrase = user_input.nextLine();
-		System.out.println("Use SSL? (true,false):");
+		System.out.print("Use SSL? (true,false):");
 		String use_sslStr = user_input.nextLine();
 		use_ssl = Boolean.parseBoolean(use_sslStr);
 		HydraClient hydraClient = new HydraClient(host, port, passphrase, use_ssl);
@@ -108,40 +109,40 @@ public class HydraClient {
 			e.printStackTrace();
 		}
 		if (hydraClient != null) {
-			System.out.println("Action, or null to exit:");
+			System.out.print("Action, or null to exit:");
 			action = user_input.nextLine();
 			while ((action != null) && (action.length() > 0)) {
-				System.out.println("Database:");
+				System.out.print("Database:");
 				database = user_input.nextLine();
 				if ((database != null) && (database.length() > 0)) {
-					System.out.println("Target:");
+					System.out.print("Target:");
 					target = user_input.nextLine();
 					if ((target != null) && (target.length() > 0)) {
 						System.out.println("Enter columns...");
-						System.out.println("column:");
+						System.out.print("column:");
 						String column = user_input.nextLine();
 						while ((column != null) && (column.length() > 0)) {
 							if (column.equals("\"\""))
 								columns.add("");
 							else
 								columns.add(column);
-							System.out.println("column:");
+							System.out.print("column:");
 							column = user_input.nextLine();
 						}
 						System.out.println("Enter values...");
-						System.out.println("value:");
+						System.out.print("value:");
 						String value = user_input.nextLine();
 						while ((value != null) && (value.length() > 0)) {
 							if (value.equals("\"\""))
 								values.add("");
 							else
 								values.add(value);
-							System.out.println("value:");
+							System.out.print("value:");
 							value = user_input.nextLine();
 						}
-						System.out.println("Selection:");
+						System.out.print("Selection:");
 						selection = user_input.nextLine();
-						System.out.println("Queueable (true,false):");
+						System.out.print("Queueable (true,false):");
 						String queueableStr = user_input.nextLine();
 						queueable = Boolean.parseBoolean(queueableStr);
 					}
@@ -226,8 +227,15 @@ public class HydraClient {
 						columnsArr[i] = columns.get(i);
 					try {
 						JSONObject response = hydraClient.query(database, target, columnsArr, selection, queueable);
-						if (response.containsKey("result"))
-							System.out.println(response.get("result"));
+						if (response.containsKey("result")) {
+							JSONArray rowsJArr = (JSONArray) response.get("result");
+							for (int r = 0, rl = rowsJArr.size(); r < rl; r++) {
+								JSONObject columnsObj = (JSONObject) rowsJArr.get(r);
+								Set<String> columnsNames = columnsObj.keySet();
+								for (String columnName : columnsNames)
+									System.out.println(columnName + "= " + ((String) columnsObj.get(columnName)));
+							}
+						}
 					} catch (UnknownHostException e) {
 						e.printStackTrace();
 					} catch (NoSuchAlgorithmException e) {
@@ -479,7 +487,6 @@ public class HydraClient {
 		if (response == null)
 			throw new IOException("no response read");
 		JSONObject jsonResponse = (JSONObject) mJSONParser.parse(response);
-		System.out.println("response: " + response);
 		setCredentials(jsonResponse);
 		return jsonResponse;
 	}
