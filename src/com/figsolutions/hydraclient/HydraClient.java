@@ -178,8 +178,15 @@ public class HydraClient {
 				} else if (ACTION_EXECUTE.equals(action)) {
 					try {
 						JSONObject response = hydraClient.execute(database, target, queueable);
-						if (response.containsKey("result"))
-							System.out.println(response.get("result"));
+						if (response.containsKey("result")) {
+							JSONArray vmValues = (JSONArray) response.get("result");
+							for (int i = 0, l = vmValues.size(); i < l; i++) {
+								JSONArray svmValues = (JSONArray) vmValues.get(i);
+								for (int i2 = 0, l2 = svmValues.size(); i2 < l2; i2++)
+									System.out.println(svmValues.get(i2));
+							}
+						} else
+							System.out.println("no result");
 					} catch (UnknownHostException e) {
 						e.printStackTrace();
 					} catch (NoSuchAlgorithmException e) {
@@ -195,8 +202,15 @@ public class HydraClient {
 						valuesArr[i] = values.get(i);
 					try {
 						JSONObject response = hydraClient.subroutine(database, target, valuesArr, queueable);
-						if (response.containsKey("result"))
-							System.out.println(response.get("result"));
+						if (response.containsKey("result")) {
+							JSONArray vmValues = (JSONArray) response.get("result");
+							for (int i = 0, l = vmValues.size(); i < l; i++) {
+								JSONArray svmValues = (JSONArray) vmValues.get(i);
+								for (int i2 = 0, l2 = svmValues.size(); i2 < l2; i2++)
+									System.out.println(svmValues.get(i2));
+							}
+						} else
+							System.out.println("no result");
 					} catch (UnknownHostException e) {
 						e.printStackTrace();
 					} catch (NoSuchAlgorithmException e) {
@@ -467,8 +481,6 @@ public class HydraClient {
 		JSONObject jsonResponse = (JSONObject) mJSONParser.parse(response);
 		System.out.println("response: " + response);
 		setCredentials(jsonResponse);
-		if (!jsonResponse.containsKey(Sresult))
-			throw new IOException("no result");
 		return jsonResponse;
 	}
 
