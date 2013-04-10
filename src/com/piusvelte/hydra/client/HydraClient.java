@@ -1,4 +1,4 @@
-package com.figsolutions.hydraclient;
+package com.piusvelte.hydra.client;
 
 import java.io.BufferedReader;
 import java.io.IOException;
