@@ -1,12 +1,17 @@
 package com.piusvelte.hydra.client;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
+import java.math.BigInteger;
 import java.net.Socket;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.URLEncoder;
 import java.net.UnknownHostException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -18,6 +23,17 @@ import java.util.Set;
 import javax.net.SocketFactory;
 import javax.net.ssl.SSLSocketFactory;
 
+import org.apache.http.HttpEntity;
+import org.apache.http.HttpResponse;
+import org.apache.http.client.ClientProtocolException;
+import org.apache.http.client.HttpClient;
+import org.apache.http.client.methods.HttpDelete;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.client.methods.HttpPut;
+import org.apache.http.client.methods.HttpUriRequest;
+import org.apache.http.client.utils.URIBuilder;
+import org.apache.http.impl.client.DefaultHttpClient;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
@@ -25,15 +41,13 @@ import org.json.simple.parser.ParseException;
 
 public class HydraClient {
 
-	public static final String PARAM_HMAC = "hmac";
-	public static final String PARAM_SALT = "salt";
-	public static final String PARAM_CHALLENGE = "challenge";
 	public static final String PARAM_DATABASE = "database";
+	public static final String PARAM_TOKEN = "token";
 	public static final String PARAM_VALUES = "values";
 	public static final String PARAM_COLUMNS = "columns";
 	public static final String PARAM_SELECTION = "selection";
-	public static final String PARAM_TARGET = "target";
-	public static final String PARAM_ACTION = "action";
+	public static final String PARAM_ARGUMENTS = "arguments";
+	public static final String PARAM_COMMAND = "command";
 	public static final String PARAM_QUEUEABLE = "queueable";
 	public static final String ACTION_ABOUT = "about";
 	public static final String ACTION_QUERY = "query";
@@ -43,9 +57,6 @@ public class HydraClient {
 	public static final String ACTION_SUBROUTINE = "subroutine";
 	public static final String ACTION_DELETE = "delete";
 
-	private String mHost = null;
-	private int mPort;
-	private String mPassphrase = null;
 	private static final String Sresult = "result";
 	private static final String Salias = "alias";
 	private static final String Stype = "type";
@@ -53,20 +64,23 @@ public class HydraClient {
 	private static final String Sport = "port";
 	public static final String[] DATABASE_ATTRS = new String[]{Salias, Stype, Shost, Sport, PARAM_DATABASE};
 
-	private Socket mSocket = null;
-	private InputStream mInStream = null;
-	private OutputStream mOutStream = null;
-	private BufferedReader mReader = null;
-	private JSONParser mJSONParser = new JSONParser();
-	private String mSalt = null;
-	private String mChallenge = null;
-	private boolean mUse_SSL = false;
+	private String scheme = "";
+	private String host = "";
+	private static final String CONTEXT = "/Hydra";
+	private static final String PATH_AUTH = "/auth";
+	private static final String PATH_API = "/api";
 
-	public HydraClient(String host, int port, String passphrase, boolean use_ssl) {
-		mHost = host;
-		mPort = port;
-		mPassphrase = passphrase;
-		mUse_SSL = use_ssl;
+	private String token = "";
+	private String passphrase = null;
+
+	public HydraClient(String host, String passphrase, boolean isSSL, String token) {
+		this.host = host;
+		if (isSSL)
+			scheme = "https";
+		else
+			scheme = "http";
+		this.passphrase = passphrase;
+		this.token = token;
 	}
 
 	// this can be run as a command line client
@@ -74,8 +88,6 @@ public class HydraClient {
 	public static void main(String[] args) {
 		Scanner user_input = new Scanner(System.in);
 		String host = null;
-		int port = 0;
-		String passphrase = null;
 		boolean use_ssl = false;
 		String action = null;
 		String database = null;
@@ -88,26 +100,30 @@ public class HydraClient {
 		host = user_input.nextLine();
 		if ((host == null) || (host.length() == 0))
 			return;
-		System.out.print("Port, or null to exit:");
-		String portStr = user_input.nextLine();
-		if ((portStr == null) || (portStr.length() == 0))
-			return;
-		port = Integer.parseInt(portStr);
 		System.out.print("Passphrase:");
-		passphrase = user_input.nextLine();
+		String passphrase = user_input.nextLine();
+		System.out.print("Token:");
+		String token = user_input.nextLine();
 		System.out.print("Use SSL? (true,false):");
 		String use_sslStr = user_input.nextLine();
 		use_ssl = Boolean.parseBoolean(use_sslStr);
-		HydraClient hydraClient = new HydraClient(host, port, passphrase, use_ssl);
+		HydraClient hydraClient = new HydraClient(host, passphrase, use_ssl, token);
+
+		// get a token
+		String unauthorizedToken;
 		try {
-			hydraClient.open();
-		} catch (IOException e) {
-			hydraClient = null;
+			unauthorizedToken = hydraClient.getUnauthorizedToken();
+		} catch (Exception e) {
 			e.printStackTrace();
-		} catch (ParseException e) {
-			hydraClient = null;
-			e.printStackTrace();
+			return;
 		}
+		try {
+			token = hydraClient.authorizeToken(unauthorizedToken);
+		} catch (Exception e) {
+			e.printStackTrace();
+			return;
+		}
+
 		if (hydraClient != null) {
 			System.out.print("Action, or null to exit:");
 			action = user_input.nextLine();
@@ -153,13 +169,7 @@ public class HydraClient {
 							String[] databases = hydraClient.getDatabases();
 							for (String db : databases)
 								System.out.println("database: " + db);
-						} catch (UnknownHostException e) {
-							e.printStackTrace();
-						} catch (NoSuchAlgorithmException e) {
-							e.printStackTrace();
-						} catch (IOException e) {
-							e.printStackTrace();
-						} catch (ParseException e) {
+						} catch (Exception e) {
 							e.printStackTrace();
 						}
 					} else {
@@ -168,11 +178,7 @@ public class HydraClient {
 							Set<String> keys = databaseInfo.keySet();
 							for (String key : keys)
 								System.out.println(key + ": " + databaseInfo.get(key));
-						} catch (NoSuchAlgorithmException e) {
-							e.printStackTrace();
-						} catch (IOException e) {
-							e.printStackTrace();
-						} catch (ParseException e) {
+						} catch (Exception e) {
 							e.printStackTrace();
 						}
 					}
@@ -188,13 +194,7 @@ public class HydraClient {
 							}
 						} else
 							System.out.println("no result");
-					} catch (UnknownHostException e) {
-						e.printStackTrace();
-					} catch (NoSuchAlgorithmException e) {
-						e.printStackTrace();
-					} catch (IOException e) {
-						e.printStackTrace();
-					} catch (ParseException e) {
+					} catch (Exception e) {
 						e.printStackTrace();
 					}
 				} else if (ACTION_SUBROUTINE.equals(action)) {
@@ -212,13 +212,7 @@ public class HydraClient {
 							}
 						} else
 							System.out.println("no result");
-					} catch (UnknownHostException e) {
-						e.printStackTrace();
-					} catch (NoSuchAlgorithmException e) {
-						e.printStackTrace();
-					} catch (IOException e) {
-						e.printStackTrace();
-					} catch (ParseException e) {
+					} catch (Exception e) {
 						e.printStackTrace();
 					}
 				} else if (ACTION_QUERY.equals(action)) {
@@ -236,13 +230,7 @@ public class HydraClient {
 									System.out.println(columnName + "= " + ((String) columnsObj.get(columnName)));
 							}
 						}
-					} catch (UnknownHostException e) {
-						e.printStackTrace();
-					} catch (NoSuchAlgorithmException e) {
-						e.printStackTrace();
-					} catch (IOException e) {
-						e.printStackTrace();
-					} catch (ParseException e) {
+					} catch (Exception e) {
 						e.printStackTrace();
 					}
 				} else if (ACTION_INSERT.equals(action)) {
@@ -256,13 +244,7 @@ public class HydraClient {
 						JSONObject response = hydraClient.insert(database, target, columnsArr, valuesArr, queueable);
 						if (response.containsKey("result"))
 							System.out.println(response.get("result"));
-					} catch (UnknownHostException e) {
-						e.printStackTrace();
-					} catch (NoSuchAlgorithmException e) {
-						e.printStackTrace();
-					} catch (IOException e) {
-						e.printStackTrace();
-					} catch (ParseException e) {
+					} catch (Exception e) {
 						e.printStackTrace();
 					}
 				} else if (ACTION_UPDATE.equals(action)) {
@@ -276,106 +258,142 @@ public class HydraClient {
 						JSONObject response = hydraClient.update(database, target, columnsArr, valuesArr, selection, queueable);
 						if (response.containsKey("result"))
 							System.out.println(response.get("result"));
-					} catch (UnknownHostException e) {
-						e.printStackTrace();
-					} catch (NoSuchAlgorithmException e) {
-						e.printStackTrace();
-					} catch (IOException e) {
-						e.printStackTrace();
-					} catch (ParseException e) {
+					} catch (Exception e) {
 						e.printStackTrace();
 					}
 				}
 				System.out.println("Action, or null to exit:");
 				action = user_input.nextLine();
 			}
-			try {
-				hydraClient.close();
-			} catch (IOException e) {
-				e.printStackTrace();
-			}
 		}
 	}
 
-	public boolean isOpen() {
-		return (mOutStream != null) && (mInStream != null);
+	private HttpClient httpClient = new DefaultHttpClient();
+	private JSONParser jsonParser = new JSONParser();
+	
+	private String getHttpEntity(HttpUriRequest request) throws Exception {
+		HttpResponse response = httpClient.execute(request);
+		HttpEntity entity = response.getEntity();
+		if (entity != null) {
+			InputStream is = entity.getContent();
+			ByteArrayOutputStream content = new ByteArrayOutputStream();
+			byte[] sBuffer = new byte[512];
+			int readBytes = 0;
+			while ((readBytes = is.read(sBuffer)) != -1)
+				content.write(sBuffer, 0, readBytes);
+			return new String(content.toByteArray());
+		} else
+			throw new Exception("response is empty");
 	}
 
-	public boolean open() throws IOException, ParseException {
-		String response = null;
+	public String getUnauthorizedToken() throws Exception {
+		URIBuilder builder = new URIBuilder();
+		builder.setScheme(scheme).setHost(host).setPath(CONTEXT + PATH_AUTH);
+		URI uri = builder.build();
+		HttpGet httpGet = new HttpGet(uri);
+		JSONObject result = (JSONObject) jsonParser.parse(getHttpEntity(httpGet));
+		return (String) result.get(Sresult);
+	}
+
+	public String authorizeToken(String token) throws Exception {
+		URIBuilder builder = new URIBuilder();
+		builder.setScheme(scheme).setHost(host).setPath(CONTEXT + PATH_AUTH).setParameter(PARAM_TOKEN, getHash64(token + passphrase));
+		URI uri = builder.build();
+		HttpGet httpGet = new HttpGet(uri);
+		JSONObject result = (JSONObject) jsonParser.parse(getHttpEntity(httpGet));
+		return (String) result.get(Sresult);
+	}
+
+	private static String getHash64(String in) {
+		String out = null;
+		MessageDigest md;
 		try {
-			if (mUse_SSL) {
-				SocketFactory sf = SSLSocketFactory.getDefault();
-				mSocket = sf.createSocket(mHost, mPort);
-			} else
-				mSocket = new Socket(mHost, mPort);
-			mInStream = mSocket.getInputStream();
-			mOutStream = mSocket.getOutputStream();
-			mReader = new BufferedReader(new InputStreamReader(mInStream));
-			response = mReader.readLine();
-		} catch (UnknownHostException e) {
+			md = MessageDigest.getInstance("SHA-256");
+			md.update(in.getBytes("UTF-8"));
+			out = new BigInteger(1, md.digest()).toString(16);
+			StringBuffer hexString = new StringBuffer();
+			byte[] hash = md.digest();
+			for (byte b : hash) {
+				if ((0xFF & b) < 0x10)
+					hexString.append("0" + Integer.toHexString((0xFF & b)));
+				else
+					hexString.append(Integer.toHexString(0xFF & b));
+			}
+			out = hexString.toString();
+			if (out.length() > 64)
+				return out.substring(0, 64);
+		} catch (NoSuchAlgorithmException e) {
 			e.printStackTrace();
-		} catch (IOException e) {
+		} catch (UnsupportedEncodingException e) {
 			e.printStackTrace();
 		}
-		if (response == null)
-			throw new IOException("no response read");
-		JSONObject jsonResponse = (JSONObject) mJSONParser.parse(response);
-		setCredentials(jsonResponse);
-		if ((mSalt == null) || (mChallenge == null))
-			throw new IOException("salt or challenge not set");
-		return true;
+		return out;
 	}
-
-	public boolean close() throws IOException {
-		if (mSocket != null) {
-			if (mInStream != null)
-				mInStream.close();
-			if (mOutStream != null)
-				mOutStream.close();
-			mSocket.close();
+	
+	public URI buildURI(String database, String entity, String[] columns, String[] values, String selection, boolean queueable) throws ParseException, Exception {
+		URIBuilder builder = new URIBuilder();
+		builder
+		.setScheme(scheme)
+		.setHost(host)
+		.setPath(CONTEXT + PATH_API + (database != null ? "/" + database + (entity != null ? "/" + entity : "") : ""))
+		.setParameter(PARAM_QUEUEABLE, Boolean.toString(queueable));
+		if (columns != null) {
+			for (int i = 0; i < columns.length; i++)
+				builder.setParameter("columns[" + i + "]", URLEncoder.encode(columns[i], "UTF-8"));
 		}
-		return true;
+		if (values != null) {
+			for (int i = 0; i < values.length; i++)
+				builder.setParameter("values[" + i + "]", URLEncoder.encode(values[i], "UTF-8"));
+		}
+		if (selection != null)
+			builder.setParameter(PARAM_SELECTION, URLEncoder.encode(selection, "UTF-8"));
+		return builder.build();
 	}
-
-	public static String getHashString(String str) throws NoSuchAlgorithmException, UnsupportedEncodingException {
-		MessageDigest md = MessageDigest.getInstance("SHA-256");
-		md.update(str.getBytes("UTF-8"));
-		StringBuffer hexString = new StringBuffer();
-		byte[] hash = md.digest();
-		for (byte b : hash) {
-			if ((0xFF & b) < 0x10)
-				hexString.append("0" + Integer.toHexString((0xFF & b)));
-			else
-				hexString.append(Integer.toHexString(0xFF & b));
+	
+	public URI buildURI(String database, String entity, String[] arguments, boolean queueable) throws ParseException, Exception {
+		URIBuilder builder = new URIBuilder();
+		builder
+		.setScheme(scheme)
+		.setHost(host)
+		.setPath(CONTEXT + PATH_API + (database != null ? "/" + database + (entity != null ? "/" + entity : "") : ""))
+		.setParameter(PARAM_QUEUEABLE, Boolean.toString(queueable));
+		if (arguments != null) {
+			for (int i = 0; i < arguments.length; i++)
+				builder.setParameter("arguments[" + i + "]", URLEncoder.encode(arguments[i], "UTF-8"));
 		}
-		return hexString.toString();
+		return builder.build();
+	}
+	
+	public URI buildURI(String database, String command, boolean queueable) throws ParseException, Exception {
+		URIBuilder builder = new URIBuilder();
+		builder
+		.setScheme(scheme)
+		.setHost(host)
+		.setPath(CONTEXT + PATH_API + (database != null ? "/" + database : ""))
+		.setParameter(PARAM_COMMAND, URLEncoder.encode(command, "UTF-8"))
+		.setParameter(PARAM_QUEUEABLE, Boolean.toString(queueable));
+		return builder.build();
 	}
 
 	@SuppressWarnings("unchecked")
-	public String[] getDatabases() throws UnknownHostException, IOException, ParseException, NoSuchAlgorithmException {
-		String[] databases = new String[0];
-		JSONObject requestObj = new JSONObject();
-		requestObj.put(PARAM_ACTION, ACTION_ABOUT);
-		JSONObject jobj = getResult(requestObj);
+	public String[] getDatabases() throws Exception {
+		JSONObject jobj = query(null, null, null, null, false);
 		JSONArray arr = (JSONArray) jobj.get(Sresult);
+		String[] databases;
 		if (arr != null) {
 			databases = new String[arr.size()];
 			for (int i = 0, l = databases.length; i < l; i++)
 				databases[i] = (String) arr.get(i);
-		}
+		} else
+			databases = new String[0];
 		return databases;
 	}
 
 	@SuppressWarnings("unchecked")
-	public HashMap<String, String> getDatabase(String database) throws NoSuchAlgorithmException, IOException, ParseException {
+	public HashMap<String, String> getDatabase(String database) throws Exception {
+		JSONObject jobj = query(database, null, null, null, false);
 		HashMap<String, String> db = new HashMap<String, String>();
-		JSONObject requestObj = new JSONObject();
-		requestObj.put(PARAM_ACTION, ACTION_ABOUT);
-		requestObj.put(PARAM_DATABASE, database);
-		JSONObject jobj = getResult(requestObj);
 		JSONObject dbObj = (JSONObject) jobj.get(Sresult);
-		// set attrs
 		for (String attr : DATABASE_ATTRS) {
 			if (dbObj.containsKey(attr))
 				db.put(attr, (String) dbObj.get(attr));
@@ -386,109 +404,33 @@ public class HydraClient {
 	}
 
 	@SuppressWarnings("unchecked")
-	public JSONObject execute(String database, String target, boolean queueable) throws UnknownHostException, IOException, ParseException, NoSuchAlgorithmException {
-		JSONObject requestObj = new JSONObject();
-		requestObj.put(PARAM_ACTION, ACTION_EXECUTE);
-		requestObj.put(PARAM_DATABASE, database);
-		requestObj.put(PARAM_TARGET, target);
-		requestObj.put(PARAM_QUEUEABLE, Boolean.toString(queueable));
-		return getResult(requestObj);
+	public JSONObject execute(String database, String command, boolean queueable) throws Exception {
+		return (JSONObject) jsonParser.parse(getHttpEntity(new HttpPost(buildURI(database, command, queueable))));
 	}
 
 	@SuppressWarnings("unchecked")
-	public JSONObject query(String database, String target, String[] columns, String selection, boolean queueable) throws UnknownHostException, IOException, ParseException, NoSuchAlgorithmException {
-		JSONObject requestObj = new JSONObject();
-		requestObj.put(PARAM_ACTION, ACTION_QUERY);
-		requestObj.put(PARAM_DATABASE, database);
-		requestObj.put(PARAM_TARGET, target);
-		JSONArray columnsArr = new JSONArray();
-		for (String c : columns)
-			columnsArr.add(c);
-		requestObj.put(PARAM_COLUMNS, columnsArr);
-		requestObj.put(PARAM_SELECTION, selection);
-		requestObj.put(PARAM_QUEUEABLE, Boolean.toString(queueable));
-		return getResult(requestObj);
+	public JSONObject query(String database, String entity, String[] columns, String selection, boolean queueable) throws Exception {
+		return (JSONObject) jsonParser.parse(getHttpEntity(new HttpGet(buildURI(database, entity, columns, null, selection, queueable))));
 	}
 
 	@SuppressWarnings("unchecked")
-	public JSONObject update(String database, String target, String[] columns, String[] values, String selection, boolean queueable) throws UnknownHostException, IOException, ParseException, NoSuchAlgorithmException {
-		JSONObject requestObj = new JSONObject();
-		requestObj.put(PARAM_ACTION, ACTION_UPDATE);
-		requestObj.put(PARAM_DATABASE, database);
-		requestObj.put(PARAM_TARGET, target);
-		JSONArray columnsArr = new JSONArray();
-		for (String c : columns)
-			columnsArr.add(c);
-		requestObj.put(PARAM_COLUMNS, columnsArr);
-		JSONArray valuesArr = new JSONArray();
-		for (String v : values)
-			valuesArr.add(v);
-		requestObj.put(PARAM_VALUES, valuesArr);
-		requestObj.put(PARAM_SELECTION, selection);
-		requestObj.put(PARAM_QUEUEABLE, Boolean.toString(queueable));
-		return getResult(requestObj);
+	public JSONObject update(String database, String entity, String[] columns, String[] values, String selection, boolean queueable) throws Exception {
+		return (JSONObject) jsonParser.parse(getHttpEntity(new HttpPut(buildURI(database, entity, columns, values, selection, queueable))));
 	}
 
 	@SuppressWarnings("unchecked")
-	public JSONObject insert(String database, String target, String[] columns, String[] values, boolean queueable) throws UnknownHostException, IOException, ParseException, NoSuchAlgorithmException {
-		JSONObject requestObj = new JSONObject();
-		requestObj.put(PARAM_ACTION, ACTION_INSERT);
-		requestObj.put(PARAM_DATABASE, database);
-		requestObj.put(PARAM_TARGET, target);
-		JSONArray columnsArr = new JSONArray();
-		for (String c : columns)
-			columnsArr.add(c);
-		requestObj.put(PARAM_COLUMNS, columnsArr);
-		JSONArray valuesArr = new JSONArray();
-		for (String v : values)
-			valuesArr.add(v);
-		requestObj.put(PARAM_VALUES, valuesArr);
-		requestObj.put(PARAM_QUEUEABLE, Boolean.toString(queueable));
-		return getResult(requestObj);
+	public JSONObject insert(String database, String entity, String[] columns, String[] values, boolean queueable) throws Exception {
+		return (JSONObject) jsonParser.parse(getHttpEntity(new HttpPost(buildURI(database, entity, columns, values, null, queueable))));
 	}
 
 	@SuppressWarnings("unchecked")
-	public JSONObject delete(String database, String target, String selection, boolean queueable) throws UnknownHostException, IOException, ParseException, NoSuchAlgorithmException {
-		JSONObject requestObj = new JSONObject();
-		requestObj.put(PARAM_ACTION, ACTION_DELETE);
-		requestObj.put(PARAM_DATABASE, database);
-		requestObj.put(PARAM_TARGET, target);
-		requestObj.put(PARAM_SELECTION, selection);
-		requestObj.put(PARAM_QUEUEABLE, Boolean.toString(queueable));
-		return getResult(requestObj);
+	public JSONObject delete(String database, String entity, String selection, boolean queueable) throws Exception {
+		return (JSONObject) jsonParser.parse(getHttpEntity(new HttpDelete(buildURI(database, entity, null, null, selection, queueable))));
 	}
 
 	@SuppressWarnings("unchecked")
-	public JSONObject subroutine(String database, String target, String[] values, boolean queueable) throws UnknownHostException, IOException, ParseException, NoSuchAlgorithmException {
-		JSONObject requestObj = new JSONObject();
-		requestObj.put(PARAM_ACTION, ACTION_SUBROUTINE);
-		requestObj.put(PARAM_DATABASE, database);
-		requestObj.put(PARAM_TARGET, target);
-		JSONArray valuesArr = new JSONArray();
-		for (String v : values)
-			valuesArr.add(v);
-		requestObj.put(PARAM_VALUES, valuesArr);
-		requestObj.put(PARAM_QUEUEABLE, Boolean.toString(queueable));
-		return getResult(requestObj);
-	}
-
-	private void setCredentials(JSONObject jobj) {
-		if (jobj.containsKey(PARAM_SALT))
-			mSalt = (String) jobj.get(PARAM_SALT);
-		if (jobj.containsKey(PARAM_CHALLENGE))
-			mChallenge = (String) jobj.get(PARAM_CHALLENGE);
-	}
-
-	@SuppressWarnings("unchecked")
-	public JSONObject getResult(JSONObject request) throws IOException, ParseException, NoSuchAlgorithmException {
-		request.put(PARAM_HMAC, getHMAC(request));
-		mOutStream.write((request.toJSONString() + "\n").getBytes());
-		String response = mReader.readLine();
-		if (response == null)
-			throw new IOException("no response read");
-		JSONObject jsonResponse = (JSONObject) mJSONParser.parse(response);
-		setCredentials(jsonResponse);
-		return jsonResponse;
+	public JSONObject subroutine(String database, String entity, String[] values, boolean queueable) throws Exception {
+		return (JSONObject) jsonParser.parse(getHttpEntity(new HttpPost(buildURI(database, entity, values, queueable))));
 	}
 
 	String[] parseArray(JSONArray jarr) {
@@ -500,37 +442,6 @@ public class HydraClient {
 		for (int i = 0, l = sArr.length; i < l; i++)
 			sArr[i] = (String) jarr.get(i);
 		return sArr;
-	}
-
-	String getHMAC(JSONObject request) throws NoSuchAlgorithmException, UnsupportedEncodingException {
-		String saltedPassphrase = getHashString(mSalt + mPassphrase);
-		if (saltedPassphrase.length() > 64)
-			saltedPassphrase = saltedPassphrase.substring(0, 64);
-		String requestAuth = "";
-		String[] params = new String[]{PARAM_ACTION, PARAM_DATABASE, PARAM_TARGET};
-		for (String p : params) {
-			String value = (String) request.get(p);
-			if (value == null)
-				value = "";
-			requestAuth += value;
-		}
-		String[] columns = parseArray((JSONArray) request.get(PARAM_COLUMNS));
-		for (String s : columns)
-			requestAuth += s;
-		String[] values = parseArray((JSONArray) request.get(PARAM_VALUES));
-		for (String s : values)
-			requestAuth += s;
-		params = new String[]{PARAM_SELECTION, PARAM_QUEUEABLE};
-		for (String p : params) {
-			String value = (String) request.get(p);
-			if (value == null)
-				value = "";
-			requestAuth += value;
-		}
-		String hmac = getHashString(requestAuth + mChallenge + saltedPassphrase);
-		if (hmac.length() > 64)
-			hmac = hmac.substring(0, 64);
-		return hmac;
 	}
 
 }
