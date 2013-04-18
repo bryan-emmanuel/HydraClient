@@ -1,18 +1,11 @@
 package com.piusvelte.hydra.client;
 
-import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
 import java.math.BigInteger;
-import java.net.Socket;
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.net.URLEncoder;
-import java.net.UnknownHostException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
@@ -20,12 +13,8 @@ import java.util.HashMap;
 import java.util.Scanner;
 import java.util.Set;
 
-import javax.net.SocketFactory;
-import javax.net.ssl.SSLSocketFactory;
-
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
-import org.apache.http.client.ClientProtocolException;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpDelete;
 import org.apache.http.client.methods.HttpGet;
@@ -66,6 +55,8 @@ public class HydraClient {
 
 	private String scheme = "";
 	private String host = "";
+	private static final int INVALID_PORT = 0;
+	private int port = INVALID_PORT;
 	private static final String CONTEXT = "/Hydra";
 	private static final String PATH_AUTH = "/auth";
 	private static final String PATH_API = "/api";
@@ -73,8 +64,9 @@ public class HydraClient {
 	private String token = "";
 	private String passphrase = null;
 
-	public HydraClient(String host, String passphrase, boolean isSSL, String token) {
+	public HydraClient(String host, int port, String passphrase, boolean isSSL, String token) {
 		this.host = host;
+		this.port = port;
 		if (isSSL)
 			scheme = "https";
 		else
@@ -88,6 +80,7 @@ public class HydraClient {
 	public static void main(String[] args) {
 		Scanner user_input = new Scanner(System.in);
 		String host = null;
+		String portStr = null;
 		boolean use_ssl = false;
 		String action = null;
 		String database = null;
@@ -100,6 +93,16 @@ public class HydraClient {
 		host = user_input.nextLine();
 		if ((host == null) || (host.length() == 0))
 			return;
+		System.out.print("Port:");
+		portStr = user_input.nextLine();
+		int port = INVALID_PORT;
+		if (portStr != null) {
+			try {
+				port = Integer.parseInt(portStr);
+			} catch (NumberFormatException e) {
+				port = INVALID_PORT;
+			}
+		}
 		System.out.print("Passphrase:");
 		String passphrase = user_input.nextLine();
 		System.out.print("Token:");
@@ -107,18 +110,12 @@ public class HydraClient {
 		System.out.print("Use SSL? (true,false):");
 		String use_sslStr = user_input.nextLine();
 		use_ssl = Boolean.parseBoolean(use_sslStr);
-		HydraClient hydraClient = new HydraClient(host, passphrase, use_ssl, token);
-
-		// get a token
-		String unauthorizedToken;
+		HydraClient hydraClient = new HydraClient(host, port, passphrase, use_ssl, token);
 		try {
-			unauthorizedToken = hydraClient.getUnauthorizedToken();
-		} catch (Exception e) {
-			e.printStackTrace();
-			return;
-		}
-		try {
-			token = hydraClient.authorizeToken(unauthorizedToken);
+			String unauthorizedToken = hydraClient.getUnauthorizedToken();
+			token = hydraClient.getAuthorizedToken(unauthorizedToken);
+			System.out.println("token: " + token);
+			hydraClient.setToken(token);
 		} catch (Exception e) {
 			e.printStackTrace();
 			return;
@@ -281,23 +278,37 @@ public class HydraClient {
 			int readBytes = 0;
 			while ((readBytes = is.read(sBuffer)) != -1)
 				content.write(sBuffer, 0, readBytes);
+			//TODO: remove the following line
+			System.out.println(new String(content.toByteArray()));
 			return new String(content.toByteArray());
 		} else
 			throw new Exception("response is empty");
+	}
+	
+	public void setToken(String token) {
+		this.token = token;
+	}
+	
+	public String getToken() {
+		return token;
 	}
 
 	public String getUnauthorizedToken() throws Exception {
 		URIBuilder builder = new URIBuilder();
 		builder.setScheme(scheme).setHost(host).setPath(CONTEXT + PATH_AUTH);
+		if (port > INVALID_PORT)
+			builder.setPort(port);
 		URI uri = builder.build();
 		HttpGet httpGet = new HttpGet(uri);
 		JSONObject result = (JSONObject) jsonParser.parse(getHttpEntity(httpGet));
 		return (String) result.get(Sresult);
 	}
 
-	public String authorizeToken(String token) throws Exception {
+	public String getAuthorizedToken(String token) throws Exception {
 		URIBuilder builder = new URIBuilder();
 		builder.setScheme(scheme).setHost(host).setPath(CONTEXT + PATH_AUTH).setParameter(PARAM_TOKEN, getHash64(token + passphrase));
+		if (port > INVALID_PORT)
+			builder.setPort(port);
 		URI uri = builder.build();
 		HttpGet httpGet = new HttpGet(uri);
 		JSONObject result = (JSONObject) jsonParser.parse(getHttpEntity(httpGet));
@@ -337,6 +348,8 @@ public class HydraClient {
 		.setHost(host)
 		.setPath(CONTEXT + PATH_API + (database != null ? "/" + database + (entity != null ? "/" + entity : "") : ""))
 		.setParameter(PARAM_QUEUEABLE, Boolean.toString(queueable));
+		if (port > INVALID_PORT)
+			builder.setPort(port);
 		if (columns != null) {
 			for (int i = 0; i < columns.length; i++)
 				builder.setParameter("columns[" + i + "]", URLEncoder.encode(columns[i], "UTF-8"));
@@ -357,6 +370,8 @@ public class HydraClient {
 		.setHost(host)
 		.setPath(CONTEXT + PATH_API + (database != null ? "/" + database + (entity != null ? "/" + entity : "") : ""))
 		.setParameter(PARAM_QUEUEABLE, Boolean.toString(queueable));
+		if (port > INVALID_PORT)
+			builder.setPort(port);
 		if (arguments != null) {
 			for (int i = 0; i < arguments.length; i++)
 				builder.setParameter("arguments[" + i + "]", URLEncoder.encode(arguments[i], "UTF-8"));
@@ -372,6 +387,8 @@ public class HydraClient {
 		.setPath(CONTEXT + PATH_API + (database != null ? "/" + database : ""))
 		.setParameter(PARAM_COMMAND, URLEncoder.encode(command, "UTF-8"))
 		.setParameter(PARAM_QUEUEABLE, Boolean.toString(queueable));
+		if (port > INVALID_PORT)
+			builder.setPort(port);
 		return builder.build();
 	}
 
