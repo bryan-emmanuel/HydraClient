@@ -1,6 +1,11 @@
 package com.piusvelte.hydra.client;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
 import java.math.BigInteger;
@@ -10,6 +15,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Properties;
 import java.util.Scanner;
 import java.util.Set;
 
@@ -53,7 +59,6 @@ public class HydraClient {
 	private static final String Sport = "port";
 	public static final String[] DATABASE_ATTRS = new String[]{Salias, Stype, Shost, Sport, PARAM_DATABASE};
 
-	private String scheme = "";
 	private String host = "";
 	private static final int INVALID_PORT = 0;
 	private int port = INVALID_PORT;
@@ -61,16 +66,14 @@ public class HydraClient {
 	private static final String PATH_AUTH = "/auth";
 	private static final String PATH_API = "/api";
 
+	private String scheme = "";
 	private String token = "";
 	private String passphrase = null;
 
-	public HydraClient(String host, int port, String passphrase, boolean isSSL, String token) {
+	public HydraClient(String scheme, String host, int port, String passphrase, String token) {
+		this.scheme = scheme;
 		this.host = host;
 		this.port = port;
-		if (isSSL)
-			scheme = "https";
-		else
-			scheme = "http";
 		this.passphrase = passphrase;
 		this.token = token;
 	}
@@ -79,9 +82,6 @@ public class HydraClient {
 	@SuppressWarnings("unchecked")
 	public static void main(String[] args) {
 		Scanner user_input = new Scanner(System.in);
-		String host = null;
-		String portStr = null;
-		boolean use_ssl = false;
 		String action = null;
 		String database = null;
 		String target = null;
@@ -89,38 +89,139 @@ public class HydraClient {
 		ArrayList<String> values = new ArrayList<String>();
 		String selection = null;
 		boolean queueable = false;
-		System.out.print("Host, or null to exit:");
-		host = user_input.nextLine();
-		if ((host == null) || (host.length() == 0))
-			return;
-		System.out.print("Port:");
-		portStr = user_input.nextLine();
+		String scheme = null;
+		String host = null;
+		String portStr = null;
 		int port = INVALID_PORT;
-		if (portStr != null) {
-			try {
-				port = Integer.parseInt(portStr);
-			} catch (NumberFormatException e) {
-				port = INVALID_PORT;
+		String passphrase = null;
+		String token = null;
+		// try to load a properties file
+		System.out.println("looking for properties file...");
+		String clientRoot = HydraClient.class.getProtectionDomain().getCodeSource().getLocation().getPath().substring(1);
+		String propsFile = clientRoot + ".properties";
+		Properties properties = new Properties();
+		FileInputStream in = null;
+		try {
+			in = new FileInputStream(propsFile);
+			properties.load(in);
+		} catch (FileNotFoundException e) {
+			properties = null;
+			e.printStackTrace();
+		} catch (IOException e) {
+			properties = null;
+			e.printStackTrace();
+		} finally {
+			if (in != null) {
+				try {
+					in.close();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
 			}
 		}
-		System.out.print("Passphrase:");
-		String passphrase = user_input.nextLine();
-		System.out.print("Token:");
-		String token = user_input.nextLine();
-		System.out.print("Use SSL? (true,false):");
-		String use_sslStr = user_input.nextLine();
-		use_ssl = Boolean.parseBoolean(use_sslStr);
-		HydraClient hydraClient = new HydraClient(host, port, passphrase, use_ssl, token);
-		try {
-			String unauthorizedToken = hydraClient.getUnauthorizedToken();
-			token = hydraClient.getAuthorizedToken(unauthorizedToken);
-			System.out.println("token: " + token);
-			hydraClient.setToken(token);
-		} catch (Exception e) {
-			e.printStackTrace();
-			return;
+		if (properties != null) {
+			if (properties.containsKey("scheme"))
+				scheme = properties.getProperty("scheme");
+			if (properties.containsKey("host"))
+				host = properties.getProperty("host");
+			if (properties.containsKey("port")) {
+				try {
+					port = Integer.parseInt(properties.getProperty("port"));
+				} catch (NumberFormatException e) {
+				}
+			}
+			if (properties.containsKey("passphrase"))
+				passphrase = properties.getProperty("passphrase");
+			if (properties.containsKey("token"))
+				token = properties.getProperty("token");
 		}
-
+		String save = null;
+		if ((host == null) || (port == INVALID_PORT) || (passphrase == null)) {
+			System.out.println("Unable to load properties.");
+			System.out.print("Scheme[http]: ");
+			scheme = user_input.nextLine();
+			if ((scheme == null) || (scheme.length() == 0))
+				scheme = "http";
+			System.out.print("Host[localhost]: ");
+			host = user_input.nextLine();
+			if ((host == null) || (host.length() == 0))
+				host = "localhost";			
+			System.out.print("Port[80]:");
+			portStr = user_input.nextLine();
+			port = INVALID_PORT;
+			if (portStr != null) {
+				try {
+					port = Integer.parseInt(portStr);
+				} catch (NumberFormatException e) {
+					port = INVALID_PORT;
+				}
+			} else
+				port = 80;
+			System.out.print("Passphrase:");
+			passphrase = user_input.nextLine();
+			System.out.print("Attempt to save properties? null to skip:");
+			save = user_input.nextLine();
+			if (save != null) {
+				if (properties == null)
+					properties = new Properties();
+				properties.setProperty("scheme", scheme);
+				properties.setProperty("host", host);
+				properties.setProperty("port", Integer.toString(port));
+				properties.setProperty("passphrase", passphrase);
+				properties.setProperty("token", "");
+				FileOutputStream out = null;
+				try {
+					out = new FileOutputStream(propsFile, false);
+					properties.store(out, "");
+				} catch (FileNotFoundException e) {
+					e.printStackTrace();
+				} catch (IOException e) {
+					e.printStackTrace();
+				} finally {
+					if (out != null) {
+						try {
+							out.close();
+						} catch (IOException e) {
+							e.printStackTrace();
+						}
+					}
+				}
+			}
+		}
+		HydraClient hydraClient = new HydraClient(scheme, host, port, passphrase, token);
+		if (token == null) {
+			System.out.println("getting a token");
+			try {
+				token = hydraClient.getUnauthorizedToken();
+				if (hydraClient.authorizeToken(token));
+				System.out.println("token: " + token);
+				hydraClient.setToken(token);
+			} catch (Exception e) {
+				e.printStackTrace();
+				return;
+			}
+			if (save != null) {
+				System.out.println("saving the token");
+				properties.setProperty("token", token);
+				FileOutputStream out = null;
+				try {
+					out = new FileOutputStream(propsFile, false);
+					properties.store(out, "");
+				} catch (FileNotFoundException e) {
+					e.printStackTrace();
+				} catch (IOException e) {
+					e.printStackTrace();
+				} finally {
+					if (out != null) {
+						try {
+							out.close();
+						} catch (IOException e) {
+							e.printStackTrace();
+						}
+					}
+				}
+			}
+		}
 		if (hydraClient != null) {
 			System.out.print("Action, or null to exit:");
 			action = user_input.nextLine();
@@ -267,7 +368,7 @@ public class HydraClient {
 
 	private HttpClient httpClient = new DefaultHttpClient();
 	private JSONParser jsonParser = new JSONParser();
-	
+
 	private String getHttpEntity(HttpUriRequest request) throws Exception {
 		HttpResponse response = httpClient.execute(request);
 		HttpEntity entity = response.getEntity();
@@ -284,11 +385,11 @@ public class HydraClient {
 		} else
 			throw new Exception("response is empty");
 	}
-	
+
 	public void setToken(String token) {
 		this.token = token;
 	}
-	
+
 	public String getToken() {
 		return token;
 	}
@@ -304,7 +405,7 @@ public class HydraClient {
 		return (String) result.get(Sresult);
 	}
 
-	public String getAuthorizedToken(String token) throws Exception {
+	public boolean authorizeToken(String token) throws Exception {
 		URIBuilder builder = new URIBuilder();
 		builder.setScheme(scheme).setHost(host).setPath(CONTEXT + PATH_AUTH).setParameter(PARAM_TOKEN, getHash64(token + passphrase));
 		if (port > INVALID_PORT)
@@ -312,7 +413,7 @@ public class HydraClient {
 		URI uri = builder.build();
 		HttpGet httpGet = new HttpGet(uri);
 		JSONObject result = (JSONObject) jsonParser.parse(getHttpEntity(httpGet));
-		return (String) result.get(Sresult);
+		return !result.containsKey("errors");
 	}
 
 	private static String getHash64(String in) {
@@ -340,13 +441,14 @@ public class HydraClient {
 		}
 		return out;
 	}
-	
+
 	public URI buildURI(String database, String entity, String[] columns, String[] values, String selection, boolean queueable) throws ParseException, Exception {
 		URIBuilder builder = new URIBuilder();
 		builder
 		.setScheme(scheme)
 		.setHost(host)
 		.setPath(CONTEXT + PATH_API + (database != null ? "/" + database + (entity != null ? "/" + entity : "") : ""))
+		.setParameter(PARAM_TOKEN, token)
 		.setParameter(PARAM_QUEUEABLE, Boolean.toString(queueable));
 		if (port > INVALID_PORT)
 			builder.setPort(port);
@@ -362,13 +464,14 @@ public class HydraClient {
 			builder.setParameter(PARAM_SELECTION, URLEncoder.encode(selection, "UTF-8"));
 		return builder.build();
 	}
-	
+
 	public URI buildURI(String database, String entity, String[] arguments, boolean queueable) throws ParseException, Exception {
 		URIBuilder builder = new URIBuilder();
 		builder
 		.setScheme(scheme)
 		.setHost(host)
 		.setPath(CONTEXT + PATH_API + (database != null ? "/" + database + (entity != null ? "/" + entity : "") : ""))
+		.setParameter(PARAM_TOKEN, token)
 		.setParameter(PARAM_QUEUEABLE, Boolean.toString(queueable));
 		if (port > INVALID_PORT)
 			builder.setPort(port);
@@ -378,13 +481,14 @@ public class HydraClient {
 		}
 		return builder.build();
 	}
-	
+
 	public URI buildURI(String database, String command, boolean queueable) throws ParseException, Exception {
 		URIBuilder builder = new URIBuilder();
 		builder
 		.setScheme(scheme)
 		.setHost(host)
 		.setPath(CONTEXT + PATH_API + (database != null ? "/" + database : ""))
+		.setParameter(PARAM_TOKEN, token)
 		.setParameter(PARAM_COMMAND, URLEncoder.encode(command, "UTF-8"))
 		.setParameter(PARAM_QUEUEABLE, Boolean.toString(queueable));
 		if (port > INVALID_PORT)
