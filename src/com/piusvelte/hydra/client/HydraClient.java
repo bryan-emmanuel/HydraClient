@@ -1,7 +1,6 @@
 package com.piusvelte.hydra.client;
 
 import java.io.ByteArrayOutputStream;
-import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
@@ -75,7 +74,7 @@ public class HydraClient {
 		this.host = host;
 		this.port = port;
 		this.passphrase = passphrase;
-		this.token = token;
+		this.token = getHash64(token + passphrase);
 	}
 
 	// this can be run as a command line client
@@ -119,7 +118,9 @@ public class HydraClient {
 				}
 			}
 		}
+		String save = null;
 		if (properties != null) {
+			save = "";
 			if (properties.containsKey("scheme"))
 				scheme = properties.getProperty("scheme");
 			if (properties.containsKey("host"))
@@ -132,11 +133,14 @@ public class HydraClient {
 			}
 			if (properties.containsKey("passphrase"))
 				passphrase = properties.getProperty("passphrase");
-			if (properties.containsKey("token"))
+			if (properties.containsKey("token")) {
 				token = properties.getProperty("token");
+				if (token.length() == 0)
+					token = null;
+			}
 		}
-		String save = null;
 		if ((host == null) || (port == INVALID_PORT) || (passphrase == null)) {
+			save = null;
 			System.out.println("Unable to load properties.");
 			System.out.print("Scheme[http]: ");
 			scheme = user_input.nextLine();
@@ -193,7 +197,7 @@ public class HydraClient {
 			System.out.println("getting a token");
 			try {
 				token = hydraClient.getUnauthorizedToken();
-				if (hydraClient.authorizeToken(token));
+				hydraClient.authorizeToken(token);
 				System.out.println("token: " + token);
 				hydraClient.setToken(token);
 			} catch (Exception e) {
@@ -379,19 +383,13 @@ public class HydraClient {
 			int readBytes = 0;
 			while ((readBytes = is.read(sBuffer)) != -1)
 				content.write(sBuffer, 0, readBytes);
-			//TODO: remove the following line
-			System.out.println(new String(content.toByteArray()));
 			return new String(content.toByteArray());
 		} else
 			throw new Exception("response is empty");
 	}
 
 	public void setToken(String token) {
-		this.token = token;
-	}
-
-	public String getToken() {
-		return token;
+		this.token = getHash64(token + passphrase);
 	}
 
 	public String getUnauthorizedToken() throws Exception {
