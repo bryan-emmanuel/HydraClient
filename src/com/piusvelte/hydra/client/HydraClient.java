@@ -1,10 +1,25 @@
+/*
+ * Hydra
+ * Copyright (C) 2012 Bryan Emmanuel
+ * 
+ * This program is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+ *  
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *  
+ *  Bryan Emmanuel piusvelte@gmail.com
+ */
 package com.piusvelte.hydra.client;
 
 import java.io.ByteArrayOutputStream;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
 import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
 import java.math.BigInteger;
@@ -12,11 +27,6 @@ import java.net.URI;
 import java.net.URLEncoder;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Properties;
-import java.util.Scanner;
-import java.util.Set;
 
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
@@ -43,13 +53,6 @@ public class HydraClient {
 	public static final String PARAM_ARGUMENTS = "arguments";
 	public static final String PARAM_COMMAND = "command";
 	public static final String PARAM_QUEUEABLE = "queueable";
-	public static final String ACTION_ABOUT = "about";
-	public static final String ACTION_QUERY = "query";
-	public static final String ACTION_INSERT = "insert";
-	public static final String ACTION_UPDATE = "update";
-	public static final String ACTION_EXECUTE = "execute";
-	public static final String ACTION_SUBROUTINE = "subroutine";
-	public static final String ACTION_DELETE = "delete";
 
 	private static final String Sresult = "result";
 	private static final String Salias = "alias";
@@ -59,7 +62,7 @@ public class HydraClient {
 	public static final String[] DATABASE_ATTRS = new String[]{Salias, Stype, Shost, Sport, PARAM_DATABASE};
 
 	private String host = "";
-	private static final int INVALID_PORT = 0;
+	public static final int INVALID_PORT = 0;
 	private int port = INVALID_PORT;
 	private static final String CONTEXT = "/Hydra";
 	private static final String PATH_AUTH = "/auth";
@@ -75,299 +78,6 @@ public class HydraClient {
 		this.port = port;
 		this.passphrase = passphrase;
 		this.token = getHash64(token + passphrase);
-	}
-
-	// this can be run as a command line client
-	@SuppressWarnings("unchecked")
-	public static void main(String[] args) {
-		Scanner user_input = new Scanner(System.in);
-		String action = null;
-		String database = null;
-		String target = null;
-		ArrayList<String> columns = new ArrayList<String>();
-		ArrayList<String> values = new ArrayList<String>();
-		String selection = null;
-		boolean queueable = false;
-		String scheme = null;
-		String host = null;
-		String portStr = null;
-		int port = INVALID_PORT;
-		String passphrase = null;
-		String token = null;
-		// try to load a properties file
-		System.out.println("looking for properties file...");
-		String clientRoot = HydraClient.class.getProtectionDomain().getCodeSource().getLocation().getPath().substring(1);
-		String propsFile = clientRoot + ".properties";
-		Properties properties = new Properties();
-		FileInputStream in = null;
-		try {
-			in = new FileInputStream(propsFile);
-			properties.load(in);
-		} catch (FileNotFoundException e) {
-			properties = null;
-			e.printStackTrace();
-		} catch (IOException e) {
-			properties = null;
-			e.printStackTrace();
-		} finally {
-			if (in != null) {
-				try {
-					in.close();
-				} catch (IOException e) {
-					e.printStackTrace();
-				}
-			}
-		}
-		String save = null;
-		if (properties != null) {
-			save = "";
-			if (properties.containsKey("scheme"))
-				scheme = properties.getProperty("scheme");
-			if (properties.containsKey("host"))
-				host = properties.getProperty("host");
-			if (properties.containsKey("port")) {
-				try {
-					port = Integer.parseInt(properties.getProperty("port"));
-				} catch (NumberFormatException e) {
-				}
-			}
-			if (properties.containsKey("passphrase"))
-				passphrase = properties.getProperty("passphrase");
-			if (properties.containsKey("token")) {
-				token = properties.getProperty("token");
-				if (token.length() == 0)
-					token = null;
-			}
-		}
-		if ((host == null) || (port == INVALID_PORT) || (passphrase == null)) {
-			save = null;
-			System.out.println("Unable to load properties.");
-			System.out.print("Scheme[http]: ");
-			scheme = user_input.nextLine();
-			if ((scheme == null) || (scheme.length() == 0))
-				scheme = "http";
-			System.out.print("Host[localhost]: ");
-			host = user_input.nextLine();
-			if ((host == null) || (host.length() == 0))
-				host = "localhost";			
-			System.out.print("Port[80]:");
-			portStr = user_input.nextLine();
-			port = INVALID_PORT;
-			if (portStr != null) {
-				try {
-					port = Integer.parseInt(portStr);
-				} catch (NumberFormatException e) {
-					port = INVALID_PORT;
-				}
-			} else
-				port = 80;
-			System.out.print("Passphrase:");
-			passphrase = user_input.nextLine();
-			System.out.print("Attempt to save properties? null to skip:");
-			save = user_input.nextLine();
-			if (save != null) {
-				if (properties == null)
-					properties = new Properties();
-				properties.setProperty("scheme", scheme);
-				properties.setProperty("host", host);
-				properties.setProperty("port", Integer.toString(port));
-				properties.setProperty("passphrase", passphrase);
-				properties.setProperty("token", "");
-				FileOutputStream out = null;
-				try {
-					out = new FileOutputStream(propsFile, false);
-					properties.store(out, "");
-				} catch (FileNotFoundException e) {
-					e.printStackTrace();
-				} catch (IOException e) {
-					e.printStackTrace();
-				} finally {
-					if (out != null) {
-						try {
-							out.close();
-						} catch (IOException e) {
-							e.printStackTrace();
-						}
-					}
-				}
-			}
-		}
-		HydraClient hydraClient = new HydraClient(scheme, host, port, passphrase, token);
-		if (token == null) {
-			System.out.println("getting a token");
-			try {
-				token = hydraClient.getUnauthorizedToken();
-				hydraClient.authorizeToken(token);
-				System.out.println("token: " + token);
-				hydraClient.setToken(token);
-			} catch (Exception e) {
-				e.printStackTrace();
-				return;
-			}
-			if (save != null) {
-				System.out.println("saving the token");
-				properties.setProperty("token", token);
-				FileOutputStream out = null;
-				try {
-					out = new FileOutputStream(propsFile, false);
-					properties.store(out, "");
-				} catch (FileNotFoundException e) {
-					e.printStackTrace();
-				} catch (IOException e) {
-					e.printStackTrace();
-				} finally {
-					if (out != null) {
-						try {
-							out.close();
-						} catch (IOException e) {
-							e.printStackTrace();
-						}
-					}
-				}
-			}
-		}
-		if (hydraClient != null) {
-			System.out.print("Action, or null to exit:");
-			action = user_input.nextLine();
-			while ((action != null) && (action.length() > 0)) {
-				System.out.print("Database:");
-				database = user_input.nextLine();
-				if ((database != null) && (database.length() > 0)) {
-					System.out.print("Target:");
-					target = user_input.nextLine();
-					if ((target != null) && (target.length() > 0)) {
-						System.out.println("Enter columns...");
-						System.out.print("column:");
-						String column = user_input.nextLine();
-						while ((column != null) && (column.length() > 0)) {
-							if (column.equals("\"\""))
-								columns.add("");
-							else
-								columns.add(column);
-							System.out.print("column:");
-							column = user_input.nextLine();
-						}
-						System.out.println("Enter values...");
-						System.out.print("value:");
-						String value = user_input.nextLine();
-						while ((value != null) && (value.length() > 0)) {
-							if (value.equals("\"\""))
-								values.add("");
-							else
-								values.add(value);
-							System.out.print("value:");
-							value = user_input.nextLine();
-						}
-						System.out.print("Selection:");
-						selection = user_input.nextLine();
-						System.out.print("Queueable (true,false):");
-						String queueableStr = user_input.nextLine();
-						queueable = Boolean.parseBoolean(queueableStr);
-					}
-				}
-				if (ACTION_ABOUT.equals(action)) {
-					if ((database == null) || (database.length() == 0)) {
-						try {
-							String[] databases = hydraClient.getDatabases();
-							for (String db : databases)
-								System.out.println("database: " + db);
-						} catch (Exception e) {
-							e.printStackTrace();
-						}
-					} else {
-						try {
-							HashMap<String, String> databaseInfo = hydraClient.getDatabase(database);
-							Set<String> keys = databaseInfo.keySet();
-							for (String key : keys)
-								System.out.println(key + ": " + databaseInfo.get(key));
-						} catch (Exception e) {
-							e.printStackTrace();
-						}
-					}
-				} else if (ACTION_EXECUTE.equals(action)) {
-					try {
-						JSONObject response = hydraClient.execute(database, target, queueable);
-						if (response.containsKey("result")) {
-							JSONArray vmValues = (JSONArray) response.get("result");
-							for (int i = 0, l = vmValues.size(); i < l; i++) {
-								JSONArray svmValues = (JSONArray) vmValues.get(i);
-								for (int i2 = 0, l2 = svmValues.size(); i2 < l2; i2++)
-									System.out.println(svmValues.get(i2));
-							}
-						} else
-							System.out.println("no result");
-					} catch (Exception e) {
-						e.printStackTrace();
-					}
-				} else if (ACTION_SUBROUTINE.equals(action)) {
-					String[] valuesArr = new String[values.size()];
-					for (int i = 0, l = valuesArr.length; i < l; i++)
-						valuesArr[i] = values.get(i);
-					try {
-						JSONObject response = hydraClient.subroutine(database, target, valuesArr, queueable);
-						if (response.containsKey("result")) {
-							JSONArray vmValues = (JSONArray) response.get("result");
-							for (int i = 0, l = vmValues.size(); i < l; i++) {
-								JSONArray svmValues = (JSONArray) vmValues.get(i);
-								for (int i2 = 0, l2 = svmValues.size(); i2 < l2; i2++)
-									System.out.println(svmValues.get(i2));
-							}
-						} else
-							System.out.println("no result");
-					} catch (Exception e) {
-						e.printStackTrace();
-					}
-				} else if (ACTION_QUERY.equals(action)) {
-					String[] columnsArr = new String[columns.size()];
-					for (int i = 0, l = columnsArr.length; i < l; i++)
-						columnsArr[i] = columns.get(i);
-					try {
-						JSONObject response = hydraClient.query(database, target, columnsArr, selection, queueable);
-						if (response.containsKey("result")) {
-							JSONArray rowsJArr = (JSONArray) response.get("result");
-							for (int r = 0, rl = rowsJArr.size(); r < rl; r++) {
-								JSONObject columnsObj = (JSONObject) rowsJArr.get(r);
-								Set<String> columnsNames = columnsObj.keySet();
-								for (String columnName : columnsNames)
-									System.out.println(columnName + "= " + ((String) columnsObj.get(columnName)));
-							}
-						}
-					} catch (Exception e) {
-						e.printStackTrace();
-					}
-				} else if (ACTION_INSERT.equals(action)) {
-					String[] columnsArr = new String[columns.size()];
-					for (int i = 0, l = columnsArr.length; i < l; i++)
-						columnsArr[i] = columns.get(i);
-					String[] valuesArr = new String[values.size()];
-					for (int i = 0, l = valuesArr.length; i < l; i++)
-						valuesArr[i] = values.get(i);
-					try {
-						JSONObject response = hydraClient.insert(database, target, columnsArr, valuesArr, queueable);
-						if (response.containsKey("result"))
-							System.out.println(response.get("result"));
-					} catch (Exception e) {
-						e.printStackTrace();
-					}
-				} else if (ACTION_UPDATE.equals(action)) {
-					String[] columnsArr = new String[columns.size()];
-					for (int i = 0, l = columnsArr.length; i < l; i++)
-						columnsArr[i] = columns.get(i);
-					String[] valuesArr = new String[values.size()];
-					for (int i = 0, l = valuesArr.length; i < l; i++)
-						valuesArr[i] = values.get(i);
-					try {
-						JSONObject response = hydraClient.update(database, target, columnsArr, valuesArr, selection, queueable);
-						if (response.containsKey("result"))
-							System.out.println(response.get("result"));
-					} catch (Exception e) {
-						e.printStackTrace();
-					}
-				}
-				System.out.println("Action, or null to exit:");
-				action = user_input.nextLine();
-			}
-		}
 	}
 
 	private HttpClient httpClient = new DefaultHttpClient();
@@ -439,6 +149,20 @@ public class HydraClient {
 		}
 		return out;
 	}
+	
+	private String packArray(String[] arr) {
+		if (arr == null)
+			return "";
+		if (arr.length == 0)
+			return "";
+		StringBuilder sb = new StringBuilder();
+		sb.append(arr[0]);
+		for (int i = 1; i < arr.length; i++) {
+			sb.append(",");
+			sb.append(arr[i]);
+		}
+		return sb.toString();
+	}
 
 	public URI buildURI(String database, String entity, String[] columns, String[] values, String selection, boolean queueable) throws ParseException, Exception {
 		URIBuilder builder = new URIBuilder();
@@ -450,14 +174,10 @@ public class HydraClient {
 		.setParameter(PARAM_QUEUEABLE, Boolean.toString(queueable));
 		if (port > INVALID_PORT)
 			builder.setPort(port);
-		if (columns != null) {
-			for (int i = 0; i < columns.length; i++)
-				builder.setParameter("columns[" + i + "]", URLEncoder.encode(columns[i], "UTF-8"));
-		}
-		if (values != null) {
-			for (int i = 0; i < values.length; i++)
-				builder.setParameter("values[" + i + "]", URLEncoder.encode(values[i], "UTF-8"));
-		}
+		if (columns != null)
+			builder.setParameter("columns", packArray(columns));
+		if (values != null)
+			builder.setParameter("values", packArray(values));
 		if (selection != null)
 			builder.setParameter(PARAM_SELECTION, URLEncoder.encode(selection, "UTF-8"));
 		return builder.build();
@@ -473,10 +193,8 @@ public class HydraClient {
 		.setParameter(PARAM_QUEUEABLE, Boolean.toString(queueable));
 		if (port > INVALID_PORT)
 			builder.setPort(port);
-		if (arguments != null) {
-			for (int i = 0; i < arguments.length; i++)
-				builder.setParameter("arguments[" + i + "]", URLEncoder.encode(arguments[i], "UTF-8"));
-		}
+		if (arguments != null)
+			builder.setParameter("arguments", packArray(arguments));
 		return builder.build();
 	}
 
@@ -495,41 +213,49 @@ public class HydraClient {
 	}
 
 	@SuppressWarnings("unchecked")
-	public String[] getDatabases() throws Exception {
-		JSONObject jobj = query(null, null, null, null, false);
-		JSONArray arr = (JSONArray) jobj.get(Sresult);
-		String[] databases;
-		if (arr != null) {
-			databases = new String[arr.size()];
-			for (int i = 0, l = databases.length; i < l; i++)
-				databases[i] = (String) arr.get(i);
-		} else
-			databases = new String[0];
-		return databases;
+	public String[][] getDatabases() throws Exception {
+		return query(null, null, new String[1], null, false);
 	}
 
 	@SuppressWarnings("unchecked")
-	public HashMap<String, String> getDatabase(String database) throws Exception {
-		JSONObject jobj = query(database, null, null, null, false);
-		HashMap<String, String> db = new HashMap<String, String>();
-		JSONObject dbObj = (JSONObject) jobj.get(Sresult);
-		for (String attr : DATABASE_ATTRS) {
-			if (dbObj.containsKey(attr))
-				db.put(attr, (String) dbObj.get(attr));
-			else
-				db.put(attr, null);
+	public String[][] getDatabase(String database) throws Exception {
+		return query(database, null, new String[5], null, false);
+	}
+
+	@SuppressWarnings("unchecked")
+	public String[][] execute(String database, String command, boolean queueable) throws Exception {
+		JSONObject result = (JSONObject) jsonParser.parse(getHttpEntity(new HttpPost(buildURI(database, command, queueable))));
+		JSONArray rows = (JSONArray) result.get("result");
+		int colSize = 1;
+		for (int r = 0, s = rows.size(); r < s; r++) {
+			JSONArray rowData = (JSONArray) rows.get(r);
+			if (rowData.size() > colSize)
+				colSize = rowData.size();
 		}
-		return db;
+		String[][] data = new String[rows.size()][colSize];
+		for (int r = 0; r < data.length; r++) {
+			JSONArray cols = (JSONArray) rows.get(r);
+			for (int c = 0; c < colSize; c++) {
+				if (c < cols.size())
+					data[r][c] = (String) cols.get(c);
+				else
+					data[r][c] = "";
+			}
+		}
+		return data;
 	}
 
 	@SuppressWarnings("unchecked")
-	public JSONObject execute(String database, String command, boolean queueable) throws Exception {
-		return (JSONObject) jsonParser.parse(getHttpEntity(new HttpPost(buildURI(database, command, queueable))));
-	}
-
-	@SuppressWarnings("unchecked")
-	public JSONObject query(String database, String entity, String[] columns, String selection, boolean queueable) throws Exception {
-		return (JSONObject) jsonParser.parse(getHttpEntity(new HttpGet(buildURI(database, entity, columns, null, selection, queueable))));
+	public String[][] query(String database, String entity, String[] columns, String selection, boolean queueable) throws Exception {
+		JSONObject result = (JSONObject) jsonParser.parse(getHttpEntity(new HttpGet(buildURI(database, entity, columns, null, selection, queueable))));
+		JSONArray rows = (JSONArray) result.get("result");
+		String[][] data = new String[rows.size()][columns.length];
+		for (int r = 0; r < data.length; r++) {
+			JSONArray cols = (JSONArray) rows.get(r);
+			for (int c = 0; c < columns.length; c++)
+				data[r][c] = (String) cols.get(c);
+		}
+		return data;
 	}
 
 	@SuppressWarnings("unchecked")
