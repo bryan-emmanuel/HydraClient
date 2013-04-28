@@ -224,18 +224,54 @@ public class HydraClient {
 
 	@SuppressWarnings("unchecked")
 	public String[][] execute(String database, String command, boolean queueable) throws Exception {
-		JSONObject result = (JSONObject) jsonParser.parse(getHttpEntity(new HttpPost(buildURI(database, command, queueable))));
-		JSONArray rows = (JSONArray) result.get("result");
+		return parseResult(getHttpEntity(new HttpPost(buildURI(database, command, queueable))));
+	}
+
+	@SuppressWarnings("unchecked")
+	public String[][] query(String database, String entity, String[] columns, String selection, boolean queueable) throws Exception {
+		return parseResult(getHttpEntity(new HttpGet(buildURI(database, entity, columns, null, selection, queueable))), columns.length);
+	}
+
+	@SuppressWarnings("unchecked")
+	public String[][] update(String database, String entity, String[] columns, String[] values, String selection, boolean queueable) throws Exception {
+		return parseResult(getHttpEntity(new HttpPut(buildURI(database, entity, columns, values, selection, queueable))));
+	}
+
+	@SuppressWarnings("unchecked")
+	public String[][] insert(String database, String entity, String[] columns, String[] values, boolean queueable) throws Exception {
+		return parseResult(getHttpEntity(new HttpPost(buildURI(database, entity, columns, values, null, queueable))));
+	}
+
+	@SuppressWarnings("unchecked")
+	public String[][] delete(String database, String entity, String selection, boolean queueable) throws Exception {
+		return parseResult(getHttpEntity(new HttpDelete(buildURI(database, entity, null, null, selection, queueable))));
+	}
+
+	@SuppressWarnings("unchecked")
+	public String[][] subroutine(String database, String entity, String[] arguments, boolean queueable) throws Exception {
+		return parseResult(getHttpEntity(new HttpPost(buildURI(database, entity, arguments, queueable))), arguments.length);
+	}
+	
+	private String[][] parseResult(String result) throws ParseException {
+		JSONArray rows = (JSONArray) ((JSONObject) jsonParser.parse(result)).get("result");
 		int colSize = 1;
 		for (int r = 0, s = rows.size(); r < s; r++) {
 			JSONArray rowData = (JSONArray) rows.get(r);
 			if (rowData.size() > colSize)
 				colSize = rowData.size();
 		}
-		String[][] data = new String[rows.size()][colSize];
+		return parseResult(rows, colSize);
+	}
+	
+	private String[][] parseResult(String result, int columnSize) throws ParseException {
+		return parseResult((JSONArray) ((JSONObject) jsonParser.parse(result)).get("result"), columnSize);
+	}
+	
+	private String[][] parseResult(JSONArray rows, int columnSize) throws ParseException {
+		String[][] data = new String[rows.size()][columnSize];
 		for (int r = 0; r < data.length; r++) {
 			JSONArray cols = (JSONArray) rows.get(r);
-			for (int c = 0; c < colSize; c++) {
+			for (int c = 0; c < columnSize; c++) {
 				if (c < cols.size())
 					data[r][c] = (String) cols.get(c);
 				else
@@ -243,50 +279,6 @@ public class HydraClient {
 			}
 		}
 		return data;
-	}
-
-	@SuppressWarnings("unchecked")
-	public String[][] query(String database, String entity, String[] columns, String selection, boolean queueable) throws Exception {
-		JSONObject result = (JSONObject) jsonParser.parse(getHttpEntity(new HttpGet(buildURI(database, entity, columns, null, selection, queueable))));
-		JSONArray rows = (JSONArray) result.get("result");
-		String[][] data = new String[rows.size()][columns.length];
-		for (int r = 0; r < data.length; r++) {
-			JSONArray cols = (JSONArray) rows.get(r);
-			for (int c = 0; c < columns.length; c++)
-				data[r][c] = (String) cols.get(c);
-		}
-		return data;
-	}
-
-	@SuppressWarnings("unchecked")
-	public JSONObject update(String database, String entity, String[] columns, String[] values, String selection, boolean queueable) throws Exception {
-		return (JSONObject) jsonParser.parse(getHttpEntity(new HttpPut(buildURI(database, entity, columns, values, selection, queueable))));
-	}
-
-	@SuppressWarnings("unchecked")
-	public JSONObject insert(String database, String entity, String[] columns, String[] values, boolean queueable) throws Exception {
-		return (JSONObject) jsonParser.parse(getHttpEntity(new HttpPost(buildURI(database, entity, columns, values, null, queueable))));
-	}
-
-	@SuppressWarnings("unchecked")
-	public JSONObject delete(String database, String entity, String selection, boolean queueable) throws Exception {
-		return (JSONObject) jsonParser.parse(getHttpEntity(new HttpDelete(buildURI(database, entity, null, null, selection, queueable))));
-	}
-
-	@SuppressWarnings("unchecked")
-	public JSONObject subroutine(String database, String entity, String[] values, boolean queueable) throws Exception {
-		return (JSONObject) jsonParser.parse(getHttpEntity(new HttpPost(buildURI(database, entity, values, queueable))));
-	}
-
-	String[] parseArray(JSONArray jarr) {
-		String[] sArr;
-		if (jarr == null)
-			sArr = new String[0];
-		else
-			sArr = new String[jarr.size()];
-		for (int i = 0, l = sArr.length; i < l; i++)
-			sArr[i] = (String) jarr.get(i);
-		return sArr;
 	}
 
 }

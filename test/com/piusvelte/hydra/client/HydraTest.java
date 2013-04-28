@@ -173,7 +173,15 @@ public class HydraTest {
 			for (String databaseName : databaseNames)
 				HydraTest.testGetDatabase(databaseName);
 			
-			HydraTest.testReadVOC();
+			HydraTest.testInsert();
+			
+			HydraTest.testQuery();
+			
+			HydraTest.testUpdate();
+			
+			HydraTest.testDelete();
+			
+			HydraTest.testExecute();
 		}
 	}
 	
@@ -231,15 +239,58 @@ public class HydraTest {
 		}
 	}
 	
-	private static void testReadVOC() {
+	private static void testExecute() {
 		System.out.println("");
-		System.out.println("testReadVOC");
+		System.out.println("testExecute(myud): WHERE");
 		try {
-			String[][] rows = hydraClient.query("myud", "VOC", new String[]{"F2", "F3"}, "@ID=\"VOC\"", false);
+			String[][] rows = hydraClient.execute("myud", "WHERE", false);
+			for (String[] rowData: rows)
+				for (String col : rowData)
+					System.out.println(col);
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+	}
+	
+	private static void testInsert() {
+		System.out.println("");
+		System.out.println("testInsert(myud): VOC @ID=test, F2=testf2, F3= testf3");
+		try {
+			String[][] rows = hydraClient.insert("myud", "VOC", new String[]{"@ID", "F2", "F3"}, new String[]{"test", "testf2", "testf3"}, false);
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+	}
+	
+	private static void testQuery() {
+		System.out.println("");
+		System.out.println("testQuery(myud): LIST VOC F2 F3 WITH @ID=\"test\"");
+		try {
+			String[][] rows = hydraClient.query("myud", "VOC", new String[]{"F2", "F3"}, "@ID=\"test\"", false);
 			for (String[] row : rows) {
 				System.out.println("F2= " + row[0]);
 				System.out.println("F3= " + row[1]);
 			}	
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+	}
+	
+	private static void testUpdate() {
+		System.out.println("");
+		System.out.println("testUpdate(myud): VOC @ID=test, F2=newf2, F3=newf3");
+		try {
+			String[][] rows = hydraClient.update("myud", "VOC", new String[]{"F2", "F3"}, new String[]{"newf2", "newf3"}, "@ID=\"test\"", false);
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+	}
+	
+	private static void testDelete() {
+		System.out.println("");
+		System.out.println("testDelete(myud): VOC WITH @ID=\"test\"");
+		try {
+			String[][] rows = hydraClient.delete("myud", "VOC", "@ID=\"test\"", false);
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
