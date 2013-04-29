@@ -93,7 +93,25 @@ public class HydraClient {
 			int readBytes = 0;
 			while ((readBytes = is.read(sBuffer)) != -1)
 				content.write(sBuffer, 0, readBytes);
-			return new String(content.toByteArray());
+			if (response.getStatusLine().getStatusCode() == 200)
+				return new String(content.toByteArray());
+			else {
+				JSONObject result = (JSONObject) jsonParser.parse(new String(content.toByteArray()));
+				if (result.containsKey("errors")) {
+					StringBuilder errors = new StringBuilder();
+					JSONArray errJSON = (JSONArray) result.get("errors");
+					int errSize = errJSON.size();
+					if (errSize > 0) {
+						errors.append(errJSON.get(0));
+						for (int i = 1; i < errSize; i++) {
+							errors.append("\n");
+							errors.append(errJSON.get(i));
+						}
+						throw new Exception(errors.toString());
+					}
+				}
+				throw new Exception("unknown error");
+			}
 		} else
 			throw new Exception("response is empty");
 	}

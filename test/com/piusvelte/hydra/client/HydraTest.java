@@ -178,6 +178,8 @@ public class HydraTest {
 			HydraTest.testQuery();
 			
 			HydraTest.testUpdate();
+
+			HydraTest.testQuery();
 			
 			HydraTest.testDelete();
 			
@@ -256,7 +258,7 @@ public class HydraTest {
 		System.out.println("");
 		System.out.println("testInsert(myud): VOC @ID=test, F2=testf2, F3= testf3");
 		try {
-			String[][] rows = hydraClient.insert("myud", "VOC", new String[]{"@ID", "F2", "F3"}, new String[]{"test", "testf2", "testf3"}, false);
+			String[][] rows = hydraClient.insert("myud", "VOC", new String[]{"@ID", "F1", "F2"}, new String[]{"test", "firstValue", "secondValue"}, false);
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
@@ -264,12 +266,13 @@ public class HydraTest {
 	
 	private static void testQuery() {
 		System.out.println("");
-		System.out.println("testQuery(myud): LIST VOC F2 F3 WITH @ID=\"test\"");
+		System.out.println("testQuery(myud): LIST VOC F1 F2 F3 WITH @ID=\"test\"");
 		try {
-			String[][] rows = hydraClient.query("myud", "VOC", new String[]{"F2", "F3"}, "@ID=\"test\"", false);
+			String[][] rows = hydraClient.query("myud", "VOC", new String[]{"F1", "F2", "F3"}, "@ID=\"test\"", false);
 			for (String[] row : rows) {
-				System.out.println("F2= " + row[0]);
-				System.out.println("F3= " + row[1]);
+				System.out.println("F1= " + row[0]);
+				System.out.println("F2= " + row[1]);
+				System.out.println("F3= " + row[2]);
 			}	
 		} catch (Exception e) {
 			e.printStackTrace();
@@ -280,7 +283,7 @@ public class HydraTest {
 		System.out.println("");
 		System.out.println("testUpdate(myud): VOC @ID=test, F2=newf2, F3=newf3");
 		try {
-			String[][] rows = hydraClient.update("myud", "VOC", new String[]{"F2", "F3"}, new String[]{"newf2", "newf3"}, "@ID=\"test\"", false);
+			String[][] rows = hydraClient.update("myud", "VOC", new String[]{"F2", "F3"}, new String[]{"newSecondValue", "thirdValue"}, "@ID=\"test\"", false);
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
