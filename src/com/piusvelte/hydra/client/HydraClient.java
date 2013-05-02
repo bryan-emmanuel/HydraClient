@@ -96,21 +96,25 @@ public class HydraClient {
 			if (response.getStatusLine().getStatusCode() == 200)
 				return new String(content.toByteArray());
 			else {
-				JSONObject result = (JSONObject) jsonParser.parse(new String(content.toByteArray()));
-				if (result.containsKey("errors")) {
-					StringBuilder errors = new StringBuilder();
-					JSONArray errJSON = (JSONArray) result.get("errors");
-					int errSize = errJSON.size();
-					if (errSize > 0) {
-						errors.append(errJSON.get(0));
-						for (int i = 1; i < errSize; i++) {
-							errors.append("\n");
-							errors.append(errJSON.get(i));
+				try {
+					JSONObject result = (JSONObject) jsonParser.parse(new String(content.toByteArray()));
+					if (result.containsKey("errors")) {
+						StringBuilder errors = new StringBuilder();
+						JSONArray errJSON = (JSONArray) result.get("errors");
+						int errSize = errJSON.size();
+						if (errSize > 0) {
+							errors.append(errJSON.get(0));
+							for (int i = 1; i < errSize; i++) {
+								errors.append("\n");
+								errors.append(errJSON.get(i));
+							}
+							throw new Exception(errors.toString());
 						}
-						throw new Exception(errors.toString());
 					}
+					throw new Exception("unknown error");
+				} catch (ParseException e) {
+					throw new Exception(new String(content.toByteArray()));
 				}
-				throw new Exception("unknown error");
 			}
 		} else
 			throw new Exception("response is empty");
@@ -167,7 +171,7 @@ public class HydraClient {
 		}
 		return out;
 	}
-	
+
 	private String packArray(String[] arr) {
 		if (arr == null)
 			return "";
@@ -269,7 +273,7 @@ public class HydraClient {
 	public String[][] subroutine(String database, String entity, String[] arguments, boolean queueable) throws Exception {
 		return parseResult(getHttpEntity(new HttpPost(buildURI(database, entity, arguments, queueable))), arguments.length);
 	}
-	
+
 	private String[][] parseResult(String result) throws ParseException {
 		JSONArray rows = (JSONArray) ((JSONObject) jsonParser.parse(result)).get("result");
 		int colSize = 1;
@@ -280,11 +284,11 @@ public class HydraClient {
 		}
 		return parseResult(rows, colSize);
 	}
-	
+
 	private String[][] parseResult(String result, int columnSize) throws ParseException {
 		return parseResult((JSONArray) ((JSONObject) jsonParser.parse(result)).get("result"), columnSize);
 	}
-	
+
 	private String[][] parseResult(JSONArray rows, int columnSize) throws ParseException {
 		String[][] data = new String[rows.size()][columnSize];
 		for (int r = 0; r < data.length; r++) {
