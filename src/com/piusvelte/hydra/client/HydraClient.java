@@ -178,10 +178,18 @@ public class HydraClient {
 		if (arr.length == 0)
 			return "";
 		StringBuilder sb = new StringBuilder();
-		sb.append(arr[0]);
+		try {
+			sb.append(URLEncoder.encode(arr[0], "UTF-8"));
+		} catch (UnsupportedEncodingException e) {
+			sb.append(arr[0]);
+		}
 		for (int i = 1; i < arr.length; i++) {
 			sb.append(",");
-			sb.append(arr[i]);
+			try {
+				sb.append(URLEncoder.encode(arr[i], "UTF-8"));
+			} catch (UnsupportedEncodingException e) {
+				sb.append(arr[0]);
+			}
 		}
 		return sb.toString();
 	}
