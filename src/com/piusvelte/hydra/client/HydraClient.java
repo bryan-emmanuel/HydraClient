@@ -64,7 +64,7 @@ public class HydraClient {
 	private String host = "";
 	public static final int INVALID_PORT = 0;
 	private int port = INVALID_PORT;
-	private static final String CONTEXT = "/Hydra";
+	private String context = "";
 	private static final String PATH_AUTH = "/auth";
 	private static final String PATH_API = "/api";
 
@@ -72,10 +72,11 @@ public class HydraClient {
 	private String token = "";
 	private String passphrase = null;
 
-	public HydraClient(String scheme, String host, int port, String passphrase, String token) {
+	public HydraClient(String scheme, String host, int port, String context, String passphrase, String token) {
 		this.scheme = scheme;
 		this.host = host;
 		this.port = port;
+		this.context = "/" + context;
 		this.passphrase = passphrase;
 		this.token = getHash64(token + passphrase);
 	}
@@ -126,7 +127,7 @@ public class HydraClient {
 
 	public String getUnauthorizedToken() throws Exception {
 		URIBuilder builder = new URIBuilder();
-		builder.setScheme(scheme).setHost(host).setPath(CONTEXT + PATH_AUTH);
+		builder.setScheme(scheme).setHost(host).setPath(context + PATH_AUTH);
 		if (port > INVALID_PORT)
 			builder.setPort(port);
 		URI uri = builder.build();
@@ -137,7 +138,7 @@ public class HydraClient {
 
 	public boolean authorizeToken(String token) throws Exception {
 		URIBuilder builder = new URIBuilder();
-		builder.setScheme(scheme).setHost(host).setPath(CONTEXT + PATH_AUTH).setParameter(PARAM_TOKEN, getHash64(token + passphrase));
+		builder.setScheme(scheme).setHost(host).setPath(context + PATH_AUTH).setParameter(PARAM_TOKEN, getHash64(token + passphrase));
 		if (port > INVALID_PORT)
 			builder.setPort(port);
 		URI uri = builder.build();
@@ -199,7 +200,7 @@ public class HydraClient {
 		builder
 		.setScheme(scheme)
 		.setHost(host)
-		.setPath(CONTEXT + PATH_API + (database != null ? "/" + database + (entity != null ? "/" + entity : "") : ""))
+		.setPath(context + PATH_API + (database != null ? "/" + database + (entity != null ? "/" + entity : "") : ""))
 		.setParameter(PARAM_TOKEN, token)
 		.setParameter(PARAM_QUEUEABLE, Boolean.toString(queueable));
 		if (port > INVALID_PORT)
@@ -218,7 +219,7 @@ public class HydraClient {
 		builder
 		.setScheme(scheme)
 		.setHost(host)
-		.setPath(CONTEXT + PATH_API + (database != null ? "/" + database + (entity != null ? "/" + entity : "") : ""))
+		.setPath(context + PATH_API + (database != null ? "/" + database + (entity != null ? "/" + entity : "") : ""))
 		.setParameter(PARAM_TOKEN, token)
 		.setParameter(PARAM_QUEUEABLE, Boolean.toString(queueable));
 		if (port > INVALID_PORT)
@@ -233,7 +234,7 @@ public class HydraClient {
 		builder
 		.setScheme(scheme)
 		.setHost(host)
-		.setPath(CONTEXT + PATH_API + (database != null ? "/" + database : ""))
+		.setPath(context + PATH_API + (database != null ? "/" + database : ""))
 		.setParameter(PARAM_TOKEN, token)
 		.setParameter(PARAM_COMMAND, URLEncoder.encode(command, "UTF-8"))
 		.setParameter(PARAM_QUEUEABLE, Boolean.toString(queueable));

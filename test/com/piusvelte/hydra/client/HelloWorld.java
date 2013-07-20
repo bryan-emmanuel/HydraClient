@@ -25,7 +25,7 @@ public class HelloWorld {
 
 	@SuppressWarnings("unchecked")
 	public static void main(String[] args) {
-		HydraClient hydraClient = new HydraClient("http", "localhost", 8080, "hydra", "");
+		HydraClient hydraClient = new HydraClient("http", "localhost", 8080, "Hydra", "hydra", "");
 		try {
 			String token = hydraClient.getUnauthorizedToken();
 			hydraClient.authorizeToken(token);

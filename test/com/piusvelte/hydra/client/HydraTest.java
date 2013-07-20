@@ -28,7 +28,7 @@ public class HydraTest {
 	// this can be run as a command line client
 	@SuppressWarnings("unchecked")
 	public static void main(String[] args) {
-		hydraClient = new HydraClient("http", "localhost", 8080, "wearebritons", "");
+		hydraClient = new HydraClient("http", "localhost", 8080, "Hydra", "wearebritons", "");
 		String token = HydraTest.testTokenAuthorization();
 		if (token == null)
 			return;
